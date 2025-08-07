@@ -1,89 +1,166 @@
-1. Birthday Paradox - Collisions are far more probable than intuition suggests. Only 23 people are enough for probability of two people sharing the same birthday to exceed 50%. So, we need to increase entropy by increasing the range.
-    1. For a space of size N, expect a 50% collision chance after about √N random picks.
-    2. Base62 encoding
-       
-      | Length (power of 62) | Combinations |
-      | -------------------- | ------------ |
-      | 6                    | 56 billion   |
-      | 7                    | 3.5 trillion |
-      | 8                    | 218 trillion |
+# System Design Notes
 
-2. Caching. In-Memory vs Disk
+## Table of Contents
+1. [Birthday Paradox & Base62](#birthday-paradox--base62)
+2. [Caching: In-Memory vs Disk](#caching-in-memory-vs-disk)
+3. [CDN with Edge Computing](#cdn-with-edge-computing)
+4. [Scaling Strategies](#scaling-strategies)
+5. [Uploading Large Files](#uploading-large-files)
+6. [File Sync Agents](#file-sync-agents)
+7. [File/Data Security](#filedata-security)
+8. [Consistency & Transactions](#consistency--transactions)
+9. [Pagination](#pagination)
+10. [Latency & Caching Strategies](#latency--caching-strategies)
 
-     Speed
-    | Memory | 100 nano-seconds (0.0001 ms) |
-    | ------ | ---------------------------- |
-    | SSD    | 0.1 ms                       |
-    | HDD    | 10 ms                        |
-	
-    Throughput
-    | Memory | Millions of reads per second |
-    | ------ | ---------------------------- |
-    | SDD    | 100,000 IOPS                 |
-    | HDD    | 100 - 200 IOPS               |
+---
 
-4. CDN with Edge Computing - Point of Presence (PoPs) geographically distributed around the globe. Adding logic to Edge using platforms like Cloudflare workers or AWS Lambda@Edge. With CDN, cost factor would come into play as the traffic increases. Edge computing have limitations in execution time, memory utilization etc.
+## Birthday Paradox & Base62
+- Collisions are more likely than expected. Only 23 people are needed for a >50% chance two share a birthday.
+- For space size N, expect 50% collision chance after about \( \sqrt{N} \) random picks.
 
-	Note: Whenever cache comes into play; we need to be careful about cache invalidation and consistency. TTL could be helpful to limit cache staleness. CDC could also help overcome the staleness.
+### Base62 Encoding
+| Length (power of 62) | Combinations       |
+|----------------------|--------------------|
+| 6                    | 56 billion         |
+| 7                    | 3.5 trillion       |
+| 8                    | 218 trillion       |
 
-5. For scaling support; go through each of the components in the design one by one.
-	1. For Database - Introduce Replication as well as Sharding/Partitioning and periodic backups in some cases.
-	2. For Services - Horizontal Scaling. Behind auto scaling group.
-	3. For distributed cache - Standalone vs Sentinel vs Cluster set up.
-	4. Counter setup - Reduce N/W overhead by "Counter Batching". Say first call get a counter batch of 0 - 1000. Second call, 1001 - 2000 etc.
-	5. Always prefer Batch Writes to reduce Database Load on write path.
-	6. CQRS - Command Query Request Segregation.
-	7. Sidecar Pattern
-	8. Bulkhead Pattern
-	9. Circuit Breaker
+---
 
+## Caching: In-Memory vs Disk
+### Speed
+| Storage | Latency               |
+|---------|------------------------|
+| Memory  | 100 nanoseconds (0.0001 ms) |
+| SSD     | 0.1 ms                |
+| HDD     | 10 ms                 |
 
-6. Uploading large Files. Always use Blob/Object Storage. Get a pre signed URL and leverage the pre signed URL to upload/download file directly to/from blob/object storage. Leverage some king of event trigger to notify about upload completion to update associated file metadata.
-	1. Prefer Chunking and/or Multipart upload. Etag and Part Number work closely with Multipart upload for Integrity, corruption handling and ordering of chunks. We could perform parallel upload/download for improved latency
-	2. A 50 GB file over a 100 Mbps n/w takes 4000 seconds to upload/download. i.e. 1.11 hours. This would cause timeout.
-	3. Large file means more possibility of network interruptions.
-	4. We have to consider server memory limit as well. Amazon API Gw limit the memory to 10MB only. Certain web servers like NGINX and Apache have configured 2GB limit as default.
-	5. Consider compression algorithms like GZip, Brotli, ZStandard for efficient storage and improved latency during upload and download. Compression is much more suitable for Text File.
+### Throughput
+| Storage | IOPS (Reads/sec)      |
+|---------|------------------------|
+| Memory  | Millions               |
+| SSD     | ~100,000              |
+| HDD     | 100 - 200             |
 
-7. System file sync agent
-	1. fswatch for Linux, MacOS and BSD
-	2. FsEvents on MacOS
-	3. FileSystemWatcher for Windows
+---
 
-8. Consider File/Data Security
-	1. Encryption at Rest
-	2. Encryption at Transit. Leverage Secure Protocols.
-	3. Access Control. RBAC - Resource Based access control.
+## CDN with Edge Computing
+- CDN = geographically distributed PoPs (Points of Presence).
+- Edge Computing = logic execution closer to user via Cloudflare Workers or AWS Lambda@Edge.
+- Benefits: Reduced latency, faster TTFB, global reach.
+- Cautions: Higher cost with scale; limits on memory, execution time.
+- Note: Be mindful of **cache invalidation** and **consistency**. TTL and CDC can help limit staleness.
 
+---
 
-9. When we consider consistency; It involves Write-Centric View.
-	1. When two different data stores are involved; We need to leverage some kind of remote lock like Redis SETNX. This provides ordering to transactions. Better yet, if we could normalize the data or data store to use the same database instead. To include atomicity with ordered transaction we could leverage SAGA pattern using compensating transactions.
-	2. In cases, where data is spanned across multiple shard or partition and ACID guarantees are needed, we could leverage 2PC as well. We could leverage distributed lock before 2PC to order the transactions to avoid any race condition. However, this step is dependent on use case.
-	3. We could leverage application level lock like Mutex Lock, In Memory flags etc. Utilizing this might increase inconsistency and complexity.
- 	4. If the race condition is not prevalent, we could leverage Optimistic concurrency control or multi version concurrency control.
+## Scaling Strategies
+1. **Database**:
+   - Replication
+   - Sharding/Partitioning
+   - Backups
+2. **Services**:
+   - Horizontal scaling
+   - Auto-scaling groups
+3. **Distributed Cache**:
+   - Standalone vs Sentinel vs Cluster
+4. **Counters**:
+   - Counter batching to reduce network overhead
+5. **Write Optimization**:
+   - Batch writes
+6. **Design Patterns**:
+   - CQRS (Command Query Responsibility Segregation)
+   - Sidecar Pattern
+   - Bulkhead Pattern
+   - Circuit Breaker
 
-    The Preference order should resort to:
-    1. Single database (best)
-    2. SAGA pattern (good for most distributed cases)
-    3. Distributed locks + 2PC (when strict ACID needed)
-    4. Application-level locks (last resort)
+---
 
+## Uploading Large Files
+- Use **Blob/Object storage** with **pre-signed URLs** for direct upload/download.
+- Use **event triggers** (e.g., S3 triggers Lambda) for post-upload actions.
+- Prefer **Chunking** / **Multipart upload** for:
+  - Fault tolerance
+  - Parallelism
+  - Data integrity (via ETag + Part Number)
+- Watch out for:
+  - Large file timeouts (e.g., 50 GB on 100 Mbps = ~1.1 hrs)
+  - Web server limits (e.g., NGINX default 2GB)
+- Consider compression: **GZip, Brotli, ZStandard** — better for text files.
 
-9. How to support pagination?
-	1. Can we perform Lazy Loading at the client side? When the full dataset is small enough to send initially, then load details on-demand as needed. Or the response size is limited with only essential data and client could load additional data based on these prior to becoming available in view port, It should be a good solution.
-	2. From server perspective; we could paginate based on offset or cursor.
-		1. Offset pagination:- problematic as it looses its position when data keeps coming. So there is a possibility that with offset, client might miss or find duplicate items, though its relatively simple to implement.
-		2. Cursor based:- One possibility is that there should be a timestamp element associated with the cursor to maintain ordering. Only timestamp will not help, as multiple item might correspond to the same timestamp leading to data loss. So with a timestamp based cursor, we should also include some identifier to distinguish different items. An alternative solution would be to use monotonically increasing counters. The drawback with this approach is that, we cannot jump to arbitrary page with this approach, say page 50.
+---
 
+## File Sync Agents
+| Platform | Utility             |
+|----------|---------------------|
+| Linux    | fswatch, inotify    |
+| macOS    | FsEvents            |
+| Windows  | FileSystemWatcher   |
 
-10. Latency? How do we handle latency? When it comes to latency we immediately think about Caching. Caching could be a distributed caching such as Redis or Memcached. Additionally, we could also leverage CDN or both. When Caching comes into picture, we should always think about data consistency and invalidation of cache.
-	1. TTL to reduce staleness.
-	2. CDC to reduce staleness. We could leverage CDC to update the data in the cache. Likewise, add data to the cache.
-	3. Geo-Sharding to reduce latency based on geo-proximity server access.
-	4. Consider various pooling mechanism such as connection pooling, thread pooling etc.
+---
 
-    Caching Strategy:
-    1. Cache aside. Mostly used.
-    2. Cache read through. Cache automatically loads data from database on cache miss
-    3. Cache write through. Update both source of truth and cache during write path.
-    4. Cache write back. Just update the cache, write to data source later.
+## File/Data Security
+1. **Encryption at Rest**
+2. **Encryption in Transit**
+3. **Access Control**:
+   - RBAC (Role-Based Access Control)
+   - IAM roles
+   - KMS, Vault
+
+---
+
+## Consistency & Transactions
+Write-centric considerations:
+
+1. **Single Database** (best)
+2. **SAGA pattern** — with compensating transactions
+3. **Distributed Lock + 2PC**
+4. **Application-level Lock** (e.g., Mutex)
+
+Other notes:
+- Use **Redis SETNX** for distributed locks
+- **2PC** for cross-shard transactions (may need pre-locking)
+- If race conditions rare: use **optimistic concurrency** (MVCC)
+- If possible, **normalize schema to a single store** to avoid complexity
+
+---
+
+## Pagination
+### Client-Side
+- Use **lazy loading** when dataset is small or partially rendered on demand.
+
+### Server-Side
+1. **Offset Pagination**:
+   - Simple but problematic under frequent inserts (can cause duplicate/missing rows).
+2. **Cursor-Based Pagination**:
+   - Use timestamp + unique ID to avoid duplicates.
+   - Monotonic counters also work but prevent page jumps (e.g., page 50).
+   - GraphQL Relay uses base64 cursors.
+
+---
+
+## Latency & Caching Strategies
+Latency mitigation techniques:
+1. **Caching**: Redis, Memcached, CDN
+2. **TTL**: Reduce staleness window
+3. **CDC**: Push updates to cache
+4. **Geo-Sharding**: Serve from nearest region
+5. **Pooling**: Connection/thread pooling
+6. **Prefetching** & **lazy loading**
+
+### Caching Strategies
+| Strategy         | Description                                                             |
+|------------------|-------------------------------------------------------------------------|
+| Cache Aside      | App reads/writes DB, manages cache manually                             |
+| Read Through     | Cache auto-loads data on miss                                           |
+| Write Through    | Writes go to cache and DB simultaneously                                |
+| Write Back       | Write to cache only; DB syncs later (risk of data loss on cache failure) |
+
+Eviction Policies:
+- **LRU** (Least Recently Used)
+- **LFU** (Least Frequently Used)
+- **FIFO** (First In First Out)
+
+---
+
+*More sections to be added: CAP theorem, Rate limiting, Leader election, Observability, etc.*
+
