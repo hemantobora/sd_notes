@@ -60,6 +60,7 @@
 	1. When two different data stores are involved; We need to leverage some kind of remote lock like Redis SETNX. This provides ordering to transactions. Better yet, if we could normalize the data or data store to use the same database instead. To include atomicity with ordered transaction we could leverage SAGA pattern using compensating transactions.
 	2. In cases, where data is spanned across multiple shard or partition and ACID guarantees are needed, we could leverage 2PC as well. We could leverage distributed lock before 2PC to order the transactions to avoid any race condition. However, this step is dependent on use case.
 	3. We could leverage application level lock like Mutex Lock, In Memory flags etc. Utilizing this might increase inconsistency and complexity.
+ 	4. If the race condition is not prevalent, we could leverage Optimistic concurrency control or multi version concurrency control.
 
     The Preference order should resort to:
     1. Single database (best)
